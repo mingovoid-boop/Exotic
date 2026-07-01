@@ -9,3 +9,4 @@ void Update(ExoticContext& context) override { auto id = context.memory.Store("H
 void Shutdown(ExoticContext& context) override { std::cout << "Shutting down Exotic." << std::endl; }
 };
 }
+

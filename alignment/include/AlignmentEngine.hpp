@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../graph/include/Graph.hpp"
-#include "../foundation/include/Types.hpp"
+#include "Graph.hpp"
+#include "Types.hpp"
 
 namespace exotic {
 struct AlignmentState {
@@ -21,3 +21,4 @@ private:
     Graph& graph_;
 };
 }
+

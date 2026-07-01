@@ -1,0 +1,10 @@
+.vs/
+build/
+out/
+CMakeCache.txt
+CMakeFiles/
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+*.log

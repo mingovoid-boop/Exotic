@@ -13,3 +13,4 @@ struct GraphNode {
     std::unordered_map<String,String> metadata;
 };
 }
+

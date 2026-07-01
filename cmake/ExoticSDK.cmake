@@ -4,5 +4,6 @@ add_library(Exotic STATIC ${EXOTIC_SOURCES})
 
 target_include_directories(Exotic PUBLIC foundation/include runtime/include graph/include memory/include observer/include alignment/include prediction/include execution/include learning/include relationship/include sdk/include)
 
-add_executable(HelloExotic sdk/examples/HelloExotic.cpp)
+add_executable(HelloExotic ${CMAKE_SOURCE_DIR}/sdk/examples/HelloExotic.cpp)
 target_link_libraries(HelloExotic PRIVATE Exotic)
+

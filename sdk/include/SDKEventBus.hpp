@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../foundation/include/Types.hpp"
+#include "Types.hpp"
 #include <functional>
 #include <unordered_map>
 #include <vector>
@@ -20,3 +20,4 @@ private:
     std::unordered_map<String,std::vector<Callback>> subscribers_;
 };
 }
+

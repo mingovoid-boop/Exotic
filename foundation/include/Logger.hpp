@@ -12,3 +12,4 @@ private:
 static const char* ToString(LogLevel level) { switch (level) { case LogLevel::Info: return "INFO"; case LogLevel::Warning: return "WARN"; case LogLevel::Error: return "ERROR"; case LogLevel::Debug: return "DEBUG"; default: return "UNKNOWN"; } }
 };
 }
+

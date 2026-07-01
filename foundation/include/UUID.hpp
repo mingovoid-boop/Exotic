@@ -10,3 +10,4 @@ public:
 static UUID Next() { static std::atomic<UUID> counter{1}; return counter++; }
 };
 }
+

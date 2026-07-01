@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Reflection.hpp"
-#include "../foundation/include/Types.hpp"
+#include "Types.hpp"
 
 namespace exotic {
 class ISerializable : public IReflectable {
@@ -13,3 +13,4 @@ public:
     virtual bool FromBinary(const String& data) = 0;
 };
 }
+

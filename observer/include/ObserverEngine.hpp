@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../graph/include/Graph.hpp"
-#include "../foundation/include/Types.hpp"
+#include "Graph.hpp"
+#include "Types.hpp"
 
 namespace exotic {
 class ObserverEngine {
@@ -13,3 +13,4 @@ private:
     Graph& graph_;
 };
 }
+

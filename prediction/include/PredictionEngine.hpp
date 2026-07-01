@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../graph/include/Graph.hpp"
-#include "../foundation/include/Types.hpp"
+#include "Graph.hpp"
+#include "Types.hpp"
 #include <vector>
 
 namespace exotic {
@@ -20,3 +20,4 @@ private:
     Graph& graph_;
 };
 }
+
