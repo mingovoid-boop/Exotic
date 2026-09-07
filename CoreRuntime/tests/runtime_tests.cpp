@@ -19,7 +19,14 @@ static void test_known_capability_executes_and_verifies() {
     require(result.verification.passed, "known capability did not verify");
     require(result.committed, "verified result did not commit");
     require(result.output == "hello", "echo output mismatch");
-    require(runtime.events().all().size() == 5, "unexpected event count");
+    const auto& events = runtime.events().all();
+    require(events.size() == 6, "unexpected event count");
+    require(events[0].type == "objective.received", "missing objective event");
+    require(events[1].type == "policy.allowed", "missing policy authorization event");
+    require(events[2].type == "budget.reserved", "missing budget reservation event");
+    require(events[3].type == "execution.simulated", "missing simulation event");
+    require(events[4].type == "verification.passed", "missing verification event");
+    require(events[5].type == "state.committed", "missing commit event");
     require(runtime.events().verify_chain(), "event chain invalid");
 }
 
@@ -41,6 +48,17 @@ static void test_ungranted_actor_is_denied() {
     require(result.verification.evidence == "actor lacks capability grant", "wrong authorization denial reason");
 }
 
+static void test_budget_denial_blocks_execution() {
+    Runtime runtime;
+    runtime.resources().set_budget("operator", 1);
+    auto result = runtime.run({"over budget", "core.execute.echo", "x", true, "operator", "", 2});
+    require(!result.executed, "over-budget action executed");
+    require(!result.committed, "over-budget action committed");
+    require(result.verification.evidence == "resource budget denied", "wrong budget denial reason");
+    const auto& events = runtime.events().all();
+    require(events.size() == 3 && events.back().type == "budget.denied", "budget denial not audited");
+}
+
 static void test_event_sequences_are_monotonic() {
     Runtime runtime;
     runtime.run({"one", "core.execute.echo", "1", true});
@@ -58,15 +76,15 @@ static void test_journal_survives_restart() {
         Runtime runtime(path);
         auto result = runtime.run({"persistent", "core.execute.echo", "persist", true});
         require(result.committed, "persistent action did not commit");
-        require(runtime.events().all().size() == 5, "persistent journal event count mismatch");
+        require(runtime.events().all().size() == 6, "persistent journal event count mismatch");
     }
     {
         Runtime recovered(path);
-        require(recovered.events().all().size() == 5, "restart did not recover journal");
+        require(recovered.events().all().size() == 6, "restart did not recover journal");
         require(recovered.events().verify_chain(), "recovered journal chain invalid");
         auto result = recovered.run({"after restart", "core.execute.echo", "again", true});
         require(result.committed, "post-restart action did not commit");
-        require(recovered.events().all().size() == 10, "post-restart event sequence mismatch");
+        require(recovered.events().all().size() == 12, "post-restart event sequence mismatch");
         require(recovered.events().verify_chain(), "post-restart chain invalid");
     }
     std::remove(path);
@@ -94,10 +112,11 @@ int main() {
         test_known_capability_executes_and_verifies();
         test_unknown_capability_is_denied();
         test_ungranted_actor_is_denied();
+        test_budget_denial_blocks_execution();
         test_event_sequences_are_monotonic();
         test_journal_survives_restart();
         test_tampered_journal_is_rejected();
-        std::cout << "EXOTIC core active tests passed\n";
+        std::cout << "EXOTIC core v0.3 active tests passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
