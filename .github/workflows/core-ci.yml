@@ -1,0 +1,42 @@
+name: EXOTIC Core CI
+
+on:
+  push:
+    branches: [main, exotic-core-v0.1]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DEXOTIC_BUILD_LEGACY_BUILDER=ON -DEXOTIC_BUILD_CORE_RUNTIME=ON
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Discover tests
+        shell: bash
+        run: |
+          count="$(ctest --test-dir build -C Release -N | sed -n 's/^Total Tests: //p')"
+          echo "Discovered tests: ${count:-0}"
+          if [ -z "$count" ] || [ "$count" -lt 1 ]; then
+            echo "ERROR: zero tests discovered; refusing false-green CI."
+            exit 1
+          fi
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Run governed simulation executable
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ./build/CoreRuntime/Release/exotic_core_tests.exe
+          else
+            ./build/CoreRuntime/exotic_core_tests
+          fi
