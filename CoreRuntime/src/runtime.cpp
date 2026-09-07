@@ -10,8 +10,6 @@
 namespace exotic::core {
 namespace {
 std::string digest(const Event& e) {
-    // Deterministic tamper-evident checksum for v0.2. Replace with a
-    // cryptographic digest before treating the journal as adversary-resistant.
     const auto ticks = std::chrono::duration_cast<std::chrono::milliseconds>(e.timestamp.time_since_epoch()).count();
     const std::string material = std::to_string(e.sequence) + "|" + e.type + "|" + e.actor + "|" +
         e.subject + "|" + e.payload + "|" + std::to_string(ticks) + "|" + e.previous_hash;
@@ -115,12 +113,37 @@ bool IdentityRegistry::allowed(const std::string& identity_id, const std::string
         std::find(it->second.grants.begin(), it->second.grants.end(), capability_id) != it->second.grants.end();
 }
 
+bool ApprovalRegistry::issue(Approval approval) {
+    if (approval.id.empty() || approval.actor_id.empty() || approval.capability_id.empty()) return false;
+    return approvals_.emplace(approval.id, std::move(approval)).second;
+}
+bool ApprovalRegistry::consume(const std::string& approval_id, const std::string& actor_id, const std::string& capability_id) {
+    auto it = approvals_.find(approval_id);
+    if (it == approvals_.end() || it->second.consumed) return false;
+    if (it->second.actor_id != actor_id || it->second.capability_id != capability_id) return false;
+    it->second.consumed = true;
+    return true;
+}
+
+void ResourceGovernor::set_budget(const std::string& actor_id, std::uint64_t units) { budgets_[actor_id] = units; }
+bool ResourceGovernor::reserve(const std::string& actor_id, std::uint64_t units) {
+    auto it = budgets_.find(actor_id);
+    if (it == budgets_.end() || units == 0 || it->second < units) return false;
+    it->second -= units;
+    return true;
+}
+std::uint64_t ResourceGovernor::remaining(const std::string& actor_id) const {
+    const auto it = budgets_.find(actor_id); return it == budgets_.end() ? 0 : it->second;
+}
+
 PolicyDecision PolicyEngine::authorize(const ActionRequest& request, const Capability& capability,
-                                       const IdentityRegistry& identities) const {
+                                       const IdentityRegistry& identities, ApprovalRegistry& approvals) const {
     if (!capability.enabled) return {false, "capability disabled"};
     if (!identities.allowed(request.actor_id, capability.id)) return {false, "actor lacks capability grant"};
-    if (capability.risk == Risk::high) return {false, "high-risk capability requires explicit approval"};
-    if (!request.simulation && capability.authority == Authority::external) return {false, "external side effects disabled in v0.2"};
+    if (capability.risk == Risk::high && !approvals.consume(request.approval_id, request.actor_id, capability.id))
+        return {false, "high-risk capability requires valid single-use approval"};
+    if (!request.simulation && capability.authority == Authority::external)
+        return {false, "external side effects disabled in v0.3"};
     return {true, request.simulation ? "simulation authorized" : "authorized"};
 }
 
@@ -129,19 +152,32 @@ Runtime::Runtime(std::string journal_path) : events_(std::move(journal_path)) {
     registry_.register_capability({"core.plan", Authority::none, Risk::low, true});
     registry_.register_capability({"core.execute.echo", Authority::sandbox, Risk::low, true});
     identities_.register_identity({"operator", true, {"core.observe", "core.plan", "core.execute.echo"}});
+    resources_.set_budget("operator", 100);
 }
 
 ActionResult Runtime::run(const ActionRequest& request) {
     events_.append("objective.received", request.actor_id, request.capability_id, request.objective);
     const Capability* capability = registry_.find(request.capability_id);
-    if (!capability) { events_.append("policy.denied", "policy", request.capability_id, "unknown capability"); return {false,false,{}, {false,"unknown capability"}}; }
-    const auto decision = policy_.authorize(request, *capability, identities_);
+    if (!capability) {
+        events_.append("policy.denied", "policy", request.capability_id, "unknown capability");
+        return {false,false,{}, {false,"unknown capability"}};
+    }
+
+    const auto decision = policy_.authorize(request, *capability, identities_, approvals_);
     events_.append(decision.allowed ? "policy.allowed" : "policy.denied", "policy", capability->id, decision.reason);
     if (!decision.allowed) return {false,false,{}, {false,decision.reason}};
+
+    if (!resources_.reserve(request.actor_id, request.cost_units)) {
+        events_.append("budget.denied", "resource-governor", capability->id, "insufficient budget");
+        return {false,false,{}, {false,"insufficient budget"}};
+    }
+    events_.append("budget.reserved", "resource-governor", capability->id, std::to_string(request.cost_units));
+
     std::string output;
     if (capability->id == "core.execute.echo") output=request.input;
     else if (capability->id == "core.observe") output="observed:"+request.input;
     else if (capability->id == "core.plan") output="plan:"+request.objective;
+
     events_.append(request.simulation ? "execution.simulated" : "execution.completed", "executor", capability->id, output);
     Verification verification{!output.empty(), !output.empty() ? "non-empty deterministic output" : "empty output"};
     events_.append(verification.passed ? "verification.passed" : "verification.failed", "verifier", capability->id, verification.evidence);
