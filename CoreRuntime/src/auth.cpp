@@ -13,8 +13,19 @@ bool AuthService::create_account(std::string account_id, std::string username, s
     if (!hasher_ || usernames_.contains(username) || accounts_.contains(account_id)) return false;
     const std::string hash = hasher_(password);
     if (hash.empty()) return false;
-    usernames_.emplace(username, account_id);
-    accounts_.emplace(account_id, Account{std::move(account_id), std::move(username), std::move(identity_id), hash});
+
+    // Keep map keys stable before moving values into the stored account.
+    const std::string account_key = account_id;
+    const std::string username_key = username;
+    Account account{std::move(account_id), std::move(username), std::move(identity_id), hash};
+    const auto [account_it, inserted] = accounts_.emplace(account_key, std::move(account));
+    if (!inserted) return false;
+    try {
+        usernames_.emplace(username_key, account_key);
+    } catch (...) {
+        accounts_.erase(account_it);
+        throw;
+    }
     return true;
 }
 
