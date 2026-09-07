@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(exotic_core
   src/runtime.cpp
+  src/auth.cpp
 )
 target_include_directories(exotic_core PUBLIC include)
 
