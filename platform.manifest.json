@@ -1,0 +1,17 @@
+{
+  "name": "EXOTIC",
+  "version": "0.1.0-dev",
+  "status": "prototype",
+  "architecture": {
+    "planes": ["control", "intelligence", "execution", "verification"],
+    "event_model": "append-only",
+    "default_mode": "simulation"
+  },
+  "core_capabilities": [
+    {"id":"core.observe","authority":"read","risk":"low"},
+    {"id":"core.plan","authority":"none","risk":"low"},
+    {"id":"core.execute.echo","authority":"sandbox","risk":"low"}
+  ],
+  "gates": ["policy", "budget", "execution", "verification"],
+  "required_endpoints": ["/health", "/version", "/capabilities", "/events"]
+}
