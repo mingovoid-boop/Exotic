@@ -17,4 +17,8 @@ if(BUILD_TESTING)
   add_executable(exotic_core_tests tests/runtime_tests.cpp)
   target_link_libraries(exotic_core_tests PRIVATE exotic_core)
   add_test(NAME exotic_core_tests COMMAND exotic_core_tests)
+
+  add_executable(exotic_auth_tests tests/auth_tests.cpp)
+  target_link_libraries(exotic_auth_tests PRIVATE exotic_core)
+  add_test(NAME exotic_auth_tests COMMAND exotic_auth_tests)
 endif()
