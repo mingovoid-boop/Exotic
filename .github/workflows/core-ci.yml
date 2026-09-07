@@ -1,0 +1,25 @@
+name: EXOTIC Core CI
+
+on:
+  push:
+    branches: [main, exotic-core-v0.1]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DEXOTIC_BUILD_LEGACY_BUILDER=ON -DEXOTIC_BUILD_CORE_RUNTIME=ON
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
