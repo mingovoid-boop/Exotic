@@ -1,11 +1,17 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
 
 namespace exotic::core {
+
+using PasswordHasher = std::function<std::string(const std::string&)>;
+using PasswordVerifier = std::function<bool(const std::string&, const std::string&)>;
+using TokenGenerator = std::function<std::string()>;
 
 struct Account {
     std::string id;
@@ -32,6 +38,7 @@ struct AuthResult {
 
 class AuthService {
 public:
+    AuthService(PasswordHasher hasher, PasswordVerifier verifier, TokenGenerator token_generator);
     bool create_account(std::string account_id, std::string username, std::string identity_id,
                         const std::string& password);
     AuthResult login(const std::string& username, const std::string& password,
@@ -41,8 +48,9 @@ public:
     bool disable_account(const std::string& account_id);
 
 private:
-    static std::string hash_password(const std::string& password, const std::string& salt);
-    static std::string make_token();
+    PasswordHasher hasher_;
+    PasswordVerifier verifier_;
+    TokenGenerator token_generator_;
     std::unordered_map<std::string, Account> accounts_;
     std::unordered_map<std::string, std::string> usernames_;
     std::unordered_map<std::string, Session> sessions_;
