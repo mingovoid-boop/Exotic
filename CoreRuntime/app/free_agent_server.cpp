@@ -23,7 +23,6 @@ constexpr socket_t invalid_socket = -1;
 #endif
 
 namespace {
-
 void close_socket(socket_t sock) {
 #ifdef _WIN32
   closesocket(sock);
@@ -104,12 +103,10 @@ std::string thought_json(const exotic::cognition::ServiceThought& t) {
 }
 
 std::string response(int status, const std::string& body) {
-  const char* text = status == 200 ? "OK" :
-                     status == 201 ? "Created" :
-                     status == 204 ? "No Content" :
-                     status == 400 ? "Bad Request" :
-                     status == 401 ? "Unauthorized" :
-                     status == 404 ? "Not Found" : "Internal Server Error";
+  const char* text = status == 200 ? "OK" : status == 201 ? "Created" :
+                     status == 204 ? "No Content" : status == 400 ? "Bad Request" :
+                     status == 401 ? "Unauthorized" : status == 404 ? "Not Found" :
+                     "Internal Server Error";
   std::ostringstream out;
   out << "HTTP/1.1 " << status << ' ' << text << "\r\n"
       << "Content-Type: application/json; charset=utf-8\r\n"
@@ -121,11 +118,9 @@ std::string response(int status, const std::string& body) {
       << "X-Frame-Options: DENY\r\n"
       << "Content-Security-Policy: default-src 'none'\r\n"
       << "Content-Length: " << body.size() << "\r\n"
-      << "Connection: close\r\n\r\n"
-      << body;
+      << "Connection: close\r\n\r\n" << body;
   return out.str();
 }
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -134,6 +129,8 @@ int main(int argc, char** argv) {
 
   const char* token_env = std::getenv("EXOTIC_OPERATOR_TOKEN");
   const std::string operator_token = token_env ? token_env : "";
+  const char* journal_env = std::getenv("EXOTIC_FREE_AGENT_JOURNAL");
+  const std::string journal_path = journal_env ? journal_env : ".exotic/free-agent-ledger.tsv";
 
 #ifdef _WIN32
   WSADATA data{};
@@ -167,8 +164,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  exotic::cognition::FreeAgentService service;
-  std::cout << "EXOTIC Free-Agent API listening on http://127.0.0.1:" << port << '\n';
+  exotic::cognition::FreeAgentService service{journal_path};
+  std::cout << "EXOTIC Free-Agent API listening on http://127.0.0.1:" << port << '\n'
+            << "Cognition journal: " << journal_path << '\n';
   if (operator_token.empty()) {
     std::cout << "WARNING: EXOTIC_OPERATOR_TOKEN is unset; local mutation endpoints are unauthenticated.\n";
   }
@@ -188,7 +186,6 @@ int main(int argc, char** argv) {
       if (n <= 0) break;
       request.append(buffer, static_cast<std::size_t>(n));
       if (request.size() > 1024 * 1024) break;
-
       const auto header_end = request.find("\r\n\r\n");
       if (header_end != std::string::npos) {
         std::size_t content_length = 0;
@@ -214,7 +211,6 @@ int main(int argc, char** argv) {
     try {
       if (method == "OPTIONS") {
         status = 204;
-        payload.clear();
       } else if (method == "GET" && path == "/health") {
         payload = service.health_json();
       } else if (method == "GET" && path == "/version") {
