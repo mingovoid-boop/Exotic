@@ -1,6 +1,6 @@
 # EXOTIC Free-Agent Console
 
-Production-oriented web console for the EXOTIC Cognitive Executive / Free-Agent runtime.
+Production-oriented web console for the EXOTIC Cognitive Executive / persistent Free-Agent runtime.
 
 ## Architecture
 
@@ -11,20 +11,42 @@ Free-Agent Console (React/TypeScript)
           v
 Free-Agent API (C++20, localhost:8421)
           |
+          +--> Operator session boundary
+          |
           v
 FreeAgentService
-          |
-          +--> durable cognition journal
-          |
-          v
+   |             |
+   |             +--> IdleCognitionScheduler
+   v
+SQLite AgentStore
+   |
+   +--> identity + avatar
+   +--> beliefs
+   +--> goals
+   +--> preferences
+   +--> drives / rewards
+   +--> operator sessions
+   +--> thought history
+   |
+   v
 FreeAgentExecutive -> AttentionScorer -> ActionGate
 ```
 
-The runtime remains authoritative. The browser does not grant itself external authority and does not fabricate connected state.
+The runtime remains authoritative. Cognitive autonomy is separate from external authority; the UI cannot bypass `ActionGate`.
+
+## Runtime persistence
+
+The server uses an embedded, pinned SQLite 3.53.4 amalgamation. The default database is:
+
+```text
+.exotic/free-agent.db
+```
+
+Override it with `EXOTIC_AGENT_DB`. WAL mode, foreign keys, and restart-safe structured tables are enabled. The legacy append-only thought journal remains as an additional audit/recovery trail.
+
+Persistent records include agent identity and avatar metadata, confidence-scored beliefs, goals, preferences, desire/drive state, reward events, operator sessions, and thoughts.
 
 ## Build the runtime
-
-From the repository root:
 
 ```powershell
 cmake -S . -B build -DEXOTIC_BUILD_CORE_RUNTIME=ON
@@ -32,25 +54,22 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Start the API on Windows:
+Start on Windows:
 
 ```powershell
 $env:EXOTIC_OPERATOR_TOKEN="change-me-for-local-use"
+$env:EXOTIC_AGENT_DB=".exotic/free-agent.db"
 $env:EXOTIC_FREE_AGENT_JOURNAL=".exotic/free-agent-ledger.tsv"
 .\build\CoreRuntime\Release\exotic_free_agent_server.exe
 ```
 
-Linux/macOS build layouts usually run:
+The API binds only to `127.0.0.1:8421`. A 30-second idle cognition scheduler may autonomously select a useful internal subject when the persisted goals, beliefs, preferences, or drives indicate something deserves attention. That cognition does not grant external execution authority.
 
-```bash
-EXOTIC_OPERATOR_TOKEN="change-me-for-local-use" EXOTIC_FREE_AGENT_JOURNAL=".exotic/free-agent-ledger.tsv" ./build/CoreRuntime/exotic_free_agent_server
-```
+## Operator control
 
-The API binds only to `127.0.0.1:8421` by default. If `EXOTIC_OPERATOR_TOKEN` is set, all POST mutations require `Authorization: Bearer <token>`. If it is unset, the server prints a warning and local mutation endpoints are unauthenticated.
+`EXOTIC_OPERATOR_TOKEN` is the local bootstrap credential. It can directly authorize local mutations or create a one-hour persisted operator session through `POST /api/operator/session`. Session tokens are stored only as SHA-256 digests and can be revoked/expired independently.
 
-Thought history is restored from the append-only journal on restart. `EXOTIC_FREE_AGENT_JOURNAL` overrides the default `.exotic/free-agent-ledger.tsv` path.
-
-## Run the console
+## Console
 
 ```powershell
 cd Apps/FreeAgentConsole
@@ -59,41 +78,31 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Set the same token in `.env`:
-
-```text
-VITE_EXOTIC_API_URL=http://localhost:8421
-VITE_EXOTIC_OPERATOR_TOKEN=change-me-for-local-use
-```
-
-Default UI port: `4173`.
+The console exposes identity/avatar customization, desire/drive levels, cumulative reward feedback, goals, beliefs, and thought history.
 
 ## Runtime API
 
 - `GET /health`
 - `GET /version`
 - `GET /api/free-agent/state`
-- `POST /api/free-agent/thoughts` with `{ "subject": string }`
-- `POST /api/free-agent/mode` with `{ "mode": "idle" | "thinking" | "waiting" | "acting" | "stopped" }`
-
-Submitting a thought creates a candidate and passes it through the real `FreeAgentExecutive`; it is not automatically treated as an externally authorized action.
+- `POST /api/operator/session`
+- `POST /api/free-agent/thoughts`
+- `POST /api/free-agent/mode`
+- `POST /api/free-agent/identity`
+- `POST /api/free-agent/reward`
+- `POST /api/free-agent/idle-tick`
 
 ## Quality gates
-
-Console:
 
 ```bash
 npm run lint
 npm run test
 npm run build
-```
-
-Runtime:
-
-```bash
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-## Current production boundary
+`exotic_agent_store_tests` verifies restart persistence for identity/avatar, beliefs, goals, preferences, drives and reward totals; it also verifies operator-session validation/revocation and idle-cognition candidate generation.
 
-This branch establishes the maintained end-to-end application base: typed console, real C++ runtime bridge, cognition service, action-gated executive, local operator authentication, durable restart-safe thought history, and CI coverage. SQLite-backed structured persistence and multi-user identity/session management remain the next infrastructure upgrade before remote deployment.
+## Production boundary
+
+This is now a persistent local agent runtime, not merely an in-memory cognition demo. Remote deployment should still add TLS termination, stronger account authentication, database migrations/backups, rate limiting, structured audit signatures, and a proper multi-user authorization model before exposing the service outside localhost.
