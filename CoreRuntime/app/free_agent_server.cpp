@@ -1,6 +1,6 @@
 #include "exotic/cognition/free_agent_service.hpp"
 
-#include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -30,6 +30,21 @@ void close_socket(socket_t sock) {
 #else
   close(sock);
 #endif
+}
+
+std::string json_escape(const std::string& input) {
+  std::ostringstream out;
+  for (const char ch : input) {
+    switch (ch) {
+      case '\\': out << "\\\\"; break;
+      case '"': out << "\\\""; break;
+      case '\n': out << "\\n"; break;
+      case '\r': out << "\\r"; break;
+      case '\t': out << "\\t"; break;
+      default: out << ch; break;
+    }
+  }
+  return out.str();
 }
 
 std::string extract_json_string(const std::string& body, const std::string& key) {
@@ -62,27 +77,49 @@ std::string extract_json_string(const std::string& body, const std::string& key)
   return value;
 }
 
+std::string header_value(const std::string& request, const std::string& name) {
+  const std::string needle = name + ":";
+  auto pos = request.find(needle);
+  if (pos == std::string::npos) return {};
+  pos += needle.size();
+  while (pos < request.size() && (request[pos] == ' ' || request[pos] == '\t')) ++pos;
+  const auto end = request.find("\r\n", pos);
+  return request.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+}
+
+bool mutation_authorized(const std::string& request, const std::string& operator_token) {
+  if (operator_token.empty()) return true;
+  return header_value(request, "Authorization") == "Bearer " + operator_token;
+}
+
 std::string thought_json(const exotic::cognition::ServiceThought& t) {
   std::ostringstream out;
-  out << "{\"id\":\"" << t.id << "\","
-      << "\"subject\":\"" << t.subject << "\","
+  out << "{\"id\":\"" << json_escape(t.id) << "\","
+      << "\"subject\":\"" << json_escape(t.subject) << "\","
       << "\"score\":" << t.score << ','
-      << "\"reason\":\"" << t.reason << "\","
-      << "\"status\":\"" << t.status << "\","
-      << "\"createdAt\":\"" << t.created_at << "\"}";
+      << "\"reason\":\"" << json_escape(t.reason) << "\","
+      << "\"status\":\"" << json_escape(t.status) << "\","
+      << "\"createdAt\":\"" << json_escape(t.created_at) << "\"}";
   return out.str();
 }
 
 std::string response(int status, const std::string& body) {
-  const char* text = status == 200 ? "OK" : status == 201 ? "Created" : status == 204 ? "No Content" : status == 400 ? "Bad Request" : status == 404 ? "Not Found" : "Internal Server Error";
+  const char* text = status == 200 ? "OK" :
+                     status == 201 ? "Created" :
+                     status == 204 ? "No Content" :
+                     status == 400 ? "Bad Request" :
+                     status == 401 ? "Unauthorized" :
+                     status == 404 ? "Not Found" : "Internal Server Error";
   std::ostringstream out;
   out << "HTTP/1.1 " << status << ' ' << text << "\r\n"
-      << "Content-Type: application/json\r\n"
-      << "Access-Control-Allow-Origin: *\r\n"
+      << "Content-Type: application/json; charset=utf-8\r\n"
+      << "Access-Control-Allow-Origin: http://localhost:4173\r\n"
       << "Access-Control-Allow-Headers: Content-Type, Authorization\r\n"
       << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
       << "Cache-Control: no-store\r\n"
       << "X-Content-Type-Options: nosniff\r\n"
+      << "X-Frame-Options: DENY\r\n"
+      << "Content-Security-Policy: default-src 'none'\r\n"
       << "Content-Length: " << body.size() << "\r\n"
       << "Connection: close\r\n\r\n"
       << body;
@@ -94,6 +131,9 @@ std::string response(int status, const std::string& body) {
 int main(int argc, char** argv) {
   int port = 8421;
   if (argc > 1) port = std::stoi(argv[1]);
+
+  const char* token_env = std::getenv("EXOTIC_OPERATOR_TOKEN");
+  const std::string operator_token = token_env ? token_env : "";
 
 #ifdef _WIN32
   WSADATA data{};
@@ -129,6 +169,9 @@ int main(int argc, char** argv) {
 
   exotic::cognition::FreeAgentService service;
   std::cout << "EXOTIC Free-Agent API listening on http://127.0.0.1:" << port << '\n';
+  if (operator_token.empty()) {
+    std::cout << "WARNING: EXOTIC_OPERATOR_TOKEN is unset; local mutation endpoints are unauthenticated.\n";
+  }
 
   for (;;) {
     socket_t client = accept(server, nullptr, nullptr);
@@ -144,6 +187,8 @@ int main(int argc, char** argv) {
 #endif
       if (n <= 0) break;
       request.append(buffer, static_cast<std::size_t>(n));
+      if (request.size() > 1024 * 1024) break;
+
       const auto header_end = request.find("\r\n\r\n");
       if (header_end != std::string::npos) {
         std::size_t content_length = 0;
@@ -176,18 +221,21 @@ int main(int argc, char** argv) {
         payload = service.version_json();
       } else if (method == "GET" && path == "/api/free-agent/state") {
         payload = service.state_json();
+      } else if (method == "POST" && !mutation_authorized(request, operator_token)) {
+        status = 401;
+        payload = "{\"error\":\"operator authorization required\"}";
       } else if (method == "POST" && path == "/api/free-agent/thoughts") {
         const auto subject = extract_json_string(body, "subject");
-        if (subject.empty()) {
+        if (subject.empty() || subject.size() > 4096) {
           status = 400;
-          payload = "{\"error\":\"subject is required\"}";
+          payload = "{\"error\":\"subject must contain 1-4096 characters\"}";
         } else {
           payload = thought_json(service.submit_thought(subject));
           status = 201;
         }
       } else if (method == "POST" && path == "/api/free-agent/mode") {
-        const auto mode = extract_json_string(body, "mode");
-        if (!service.set_mode(mode)) {
+        const auto requested_mode = extract_json_string(body, "mode");
+        if (!service.set_mode(requested_mode)) {
           status = 400;
           payload = "{\"error\":\"invalid mode\"}";
         } else {
@@ -197,9 +245,9 @@ int main(int argc, char** argv) {
         status = 404;
         payload = "{\"error\":\"not found\"}";
       }
-    } catch (const std::exception& ex) {
+    } catch (const std::exception&) {
       status = 500;
-      payload = std::string("{\"error\":\"") + ex.what() + "\"}";
+      payload = "{\"error\":\"internal server error\"}";
     }
 
     const auto wire = response(status, payload);
