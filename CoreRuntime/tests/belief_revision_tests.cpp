@@ -1,0 +1,5 @@
+#include "exotic/cognition/belief_revision.hpp"
+#include <cassert>
+#include <cstdio>
+using namespace exotic::cognition;
+int main(){const char*p="belief_revision_test.db";std::remove(p);{AgentStore s(p);s.initialize();s.upsert_belief({"b1","The first hypothesis is likely",.65,"initial observation","t0"});BeliefRevisionCapability r(s);std::vector<BeliefEvidence> ev{{"e1","b1","measurement-A","contrary result",-.8,.95,"t1"},{"e2","b1","replication-B","contrary replication",-.7,.9,"t2"}};auto proposal=r.consider("b1",ev,"The alternative hypothesis is more plausible");assert(proposal.old_confidence==.65);assert(proposal.proposed_confidence<.65);auto unchanged=s.beliefs();assert(unchanged[0].proposition=="The first hypothesis is likely");assert(r.apply(proposal,"t3"));auto after=s.beliefs();assert(after[0].proposition=="The alternative hypothesis is more plausible");auto h=r.history("b1");assert(h.size()==1);assert(h[0].before_proposition=="The first hypothesis is likely");assert(h[0].after_proposition=="The alternative hypothesis is more plausible");}std::remove(p);std::remove("belief_revision_test.db-wal");std::remove("belief_revision_test.db-shm");return 0;}

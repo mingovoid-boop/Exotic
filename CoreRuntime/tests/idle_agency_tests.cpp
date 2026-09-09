@@ -1,0 +1,5 @@
+#include "exotic/cognition/idle_cognition.hpp"
+#include <cassert>
+#include <cstdio>
+using namespace exotic::cognition;
+int main(){const char*path="idle_agency_test.db";std::remove(path);{AgentStore store(path);store.initialize();store.upsert_goal({"g1","Explore a question",.9,"self","active"});store.set_drive({"curiosity",.2,.8,.1});IdleCognitionScheduler idle(store);auto before=store.preferences();auto cycle=idle.agency_cycle(false,1000,false);assert(cycle.has_value());assert(!cycle->persisted);assert(!cycle->candidate.id.empty());assert(!cycle->agency.volition.rationale.empty());assert(!cycle->agency.external_action_authorized);assert(store.preferences().size()==before.size());auto busy=idle.agency_cycle(true,1001,false);assert(!busy.has_value());auto saved=idle.agency_cycle(false,1002,true);assert(saved.has_value()&&saved->persisted);idle.apply_reward(.8);auto drives=store.drives();assert(!drives.empty());assert(drives.front().level==.2);assert(!store.episodes().empty());}std::remove(path);std::remove("idle_agency_test.db-wal");std::remove("idle_agency_test.db-shm");return 0;}

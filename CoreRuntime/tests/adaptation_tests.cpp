@@ -1,0 +1,4 @@
+#include "exotic/cognition/adaptation.hpp"
+#include <cassert>
+using namespace exotic::cognition;
+int main(){AdaptationCapability a;auto none=a.propose({},AdaptationTarget::Drive,"curiosity");assert(none.empty());std::vector<AdaptationEvidence> weak{{"e1","uncertain feedback",1,.2,.4}};auto low=a.propose(weak,AdaptationTarget::Preference,"novelty");assert(low.empty()||a.consider(low.front()).decision==AdaptationDecision::ObserveMore);std::vector<AdaptationEvidence> strong{{"e1","verified success",.8,.95,.9},{"e2","replicated result",.7,.9,.85}};auto p=a.propose(strong,AdaptationTarget::Strategy,"verify");assert(p.size()==1);assert(p[0].target_id=="verify");assert(p[0].suggested_delta>0);assert(p[0].suggested_delta<=.10);auto choice=a.consider(p[0]);assert(choice.decision==AdaptationDecision::Adopt||choice.decision==AdaptationDecision::Defer);assert(p[0].suggested_delta>0);return 0;}

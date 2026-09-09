@@ -1,0 +1,36 @@
+name: EXOTIC Free-Agent Console CI
+
+on:
+  push:
+    branches: [main, app/free-agent-production-base]
+    paths:
+      - 'Apps/FreeAgentConsole/**'
+      - '.github/workflows/free-agent-console-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Apps/FreeAgentConsole/**'
+      - '.github/workflows/free-agent-console-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Apps/FreeAgentConsole
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm install
+      - name: Typecheck
+        run: npm run lint
+      - name: Test
+        run: npm run test -- --passWithNoTests
+      - name: Build
+        run: npm run build
