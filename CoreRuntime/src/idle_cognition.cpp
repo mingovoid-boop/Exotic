@@ -1,7 +1,10 @@
 #include "exotic/cognition/idle_cognition.hpp"
+#include "exotic/cognition/self_model.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <string>
 
 namespace exotic::cognition {
 
@@ -14,6 +17,12 @@ bool IdleCognitionScheduler::should_run(bool externally_busy) const {
 }
 
 std::optional<ThoughtCandidate> IdleCognitionScheduler::next_candidate() const {
+  DevelopmentalSelfModel self(store_);
+  self.consolidate();
+  self.reflect();
+  self.adapt_preferences(0.03);
+  self.generate_candidate_goals();
+
   const auto goals = store_.goals();
   const auto beliefs = store_.beliefs();
   const auto preferences = store_.preferences();
@@ -75,6 +84,15 @@ void IdleCognitionScheduler::apply_reward(double reward) {
     drive.level = std::clamp(drive.level + delta, 0.0, 1.0);
     store_.set_drive(drive);
   }
+
+  const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
+  DevelopmentalSelfModel self(store_);
+  self.remember({
+      "reward-episode-" + std::to_string(tick),
+      reward >= 0.0 ? "Operator feedback reinforced the recent cognitive pattern." : "Operator feedback discouraged the recent cognitive pattern.",
+      std::clamp(0.55 + std::abs(reward) * 0.35, 0.0, 1.0),
+      std::clamp(reward, -1.0, 1.0),
+      ""});
 }
 
 }  // namespace exotic::cognition
