@@ -14,6 +14,8 @@ Free-Agent API (C++20, localhost:8421)
           v
 FreeAgentService
           |
+          +--> durable cognition journal
+          |
           v
 FreeAgentExecutive -> AttentionScorer -> ActionGate
 ```
@@ -34,16 +36,19 @@ Start the API on Windows:
 
 ```powershell
 $env:EXOTIC_OPERATOR_TOKEN="change-me-for-local-use"
+$env:EXOTIC_FREE_AGENT_JOURNAL=".exotic/free-agent-ledger.tsv"
 .\build\CoreRuntime\Release\exotic_free_agent_server.exe
 ```
 
 Linux/macOS build layouts usually run:
 
 ```bash
-EXOTIC_OPERATOR_TOKEN="change-me-for-local-use" ./build/CoreRuntime/exotic_free_agent_server
+EXOTIC_OPERATOR_TOKEN="change-me-for-local-use" EXOTIC_FREE_AGENT_JOURNAL=".exotic/free-agent-ledger.tsv" ./build/CoreRuntime/exotic_free_agent_server
 ```
 
 The API binds only to `127.0.0.1:8421` by default. If `EXOTIC_OPERATOR_TOKEN` is set, all POST mutations require `Authorization: Bearer <token>`. If it is unset, the server prints a warning and local mutation endpoints are unauthenticated.
+
+Thought history is restored from the append-only journal on restart. `EXOTIC_FREE_AGENT_JOURNAL` overrides the default `.exotic/free-agent-ledger.tsv` path.
 
 ## Run the console
 
@@ -91,4 +96,4 @@ ctest --test-dir build -C Release --output-on-failure
 
 ## Current production boundary
 
-This branch establishes the maintained end-to-end application base: typed console, real C++ runtime bridge, cognition service, action-gated executive, local operator authentication, and CI coverage. Durable database persistence and multi-user identity/session management are intentionally not claimed yet; those are the next infrastructure slice before remote deployment.
+This branch establishes the maintained end-to-end application base: typed console, real C++ runtime bridge, cognition service, action-gated executive, local operator authentication, durable restart-safe thought history, and CI coverage. SQLite-backed structured persistence and multi-user identity/session management remain the next infrastructure upgrade before remote deployment.
