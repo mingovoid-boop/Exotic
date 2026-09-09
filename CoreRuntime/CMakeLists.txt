@@ -9,7 +9,10 @@ FetchContent_Declare(
   URL https://www.sqlite.org/2026/sqlite-amalgamation-3530400.zip
   DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
-FetchContent_MakeAvailable(sqlite_amalgamation)
+FetchContent_GetProperties(sqlite_amalgamation)
+if(NOT sqlite_amalgamation_POPULATED)
+  FetchContent_Populate(sqlite_amalgamation)
+endif()
 
 add_library(exotic_sqlite STATIC
   ${sqlite_amalgamation_SOURCE_DIR}/sqlite3.c
