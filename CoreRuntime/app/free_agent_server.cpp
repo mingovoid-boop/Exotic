@@ -1,10 +1,15 @@
 #include "exotic/cognition/free_agent_service.hpp"
+#include "exotic/cognition/operator_sessions.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -60,12 +65,7 @@ std::string extract_json_string(const std::string& body, const std::string& key)
   for (; pos < body.size(); ++pos) {
     const char ch = body[pos];
     if (escaped) {
-      switch (ch) {
-        case 'n': value.push_back('\n'); break;
-        case 'r': value.push_back('\r'); break;
-        case 't': value.push_back('\t'); break;
-        default: value.push_back(ch); break;
-      }
+      switch (ch) { case 'n': value.push_back('\n'); break; case 'r': value.push_back('\r'); break; case 't': value.push_back('\t'); break; default: value.push_back(ch); break; }
       escaped = false;
       continue;
     }
@@ -74,6 +74,15 @@ std::string extract_json_string(const std::string& body, const std::string& key)
     value.push_back(ch);
   }
   return value;
+}
+
+double extract_json_number(const std::string& body, const std::string& key, double fallback = 0.0) {
+  const std::string needle = "\"" + key + "\"";
+  auto pos = body.find(needle);
+  if (pos == std::string::npos) return fallback;
+  pos = body.find(':', pos + needle.size());
+  if (pos == std::string::npos) return fallback;
+  try { return std::stod(body.substr(pos + 1)); } catch (...) { return fallback; }
 }
 
 std::string header_value(const std::string& request, const std::string& name) {
@@ -86,39 +95,52 @@ std::string header_value(const std::string& request, const std::string& name) {
   return request.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
 }
 
-bool mutation_authorized(const std::string& request, const std::string& operator_token) {
-  if (operator_token.empty()) return true;
-  return header_value(request, "Authorization") == "Bearer " + operator_token;
+std::int64_t now_unix() {
+  return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+std::string random_token() {
+  std::random_device rd;
+  std::ostringstream out;
+  out << std::hex;
+  for (int i = 0; i < 8; ++i) out << static_cast<std::uint32_t>(rd());
+  return out.str();
+}
+
+bool mutation_authorized(const std::string& request,
+                         const std::string& bootstrap_token,
+                         const exotic::cognition::OperatorSessionManager* sessions) {
+  const auto auth = header_value(request, "Authorization");
+  if (!bootstrap_token.empty() && auth == "Bearer " + bootstrap_token) return true;
+  if (sessions) {
+    const auto session_id = header_value(request, "X-EXOTIC-Session");
+    if (!session_id.empty() && auth.rfind("Bearer ", 0) == 0) {
+      return sessions->validate(session_id, auth.substr(7), now_unix());
+    }
+  }
+  return bootstrap_token.empty();
 }
 
 std::string thought_json(const exotic::cognition::ServiceThought& t) {
   std::ostringstream out;
-  out << "{\"id\":\"" << json_escape(t.id) << "\","
-      << "\"subject\":\"" << json_escape(t.subject) << "\","
-      << "\"score\":" << t.score << ','
-      << "\"reason\":\"" << json_escape(t.reason) << "\","
-      << "\"status\":\"" << json_escape(t.status) << "\","
-      << "\"createdAt\":\"" << json_escape(t.created_at) << "\"}";
+  out << "{\"id\":\"" << json_escape(t.id) << "\",\"subject\":\"" << json_escape(t.subject)
+      << "\",\"score\":" << t.score << ",\"reason\":\"" << json_escape(t.reason)
+      << "\",\"status\":\"" << json_escape(t.status) << "\",\"createdAt\":\"" << json_escape(t.created_at) << "\"}";
   return out.str();
 }
 
 std::string response(int status, const std::string& body) {
-  const char* text = status == 200 ? "OK" : status == 201 ? "Created" :
-                     status == 204 ? "No Content" : status == 400 ? "Bad Request" :
-                     status == 401 ? "Unauthorized" : status == 404 ? "Not Found" :
-                     "Internal Server Error";
+  const char* text = status == 200 ? "OK" : status == 201 ? "Created" : status == 204 ? "No Content" :
+                     status == 400 ? "Bad Request" : status == 401 ? "Unauthorized" : status == 404 ? "Not Found" : "Internal Server Error";
   std::ostringstream out;
   out << "HTTP/1.1 " << status << ' ' << text << "\r\n"
       << "Content-Type: application/json; charset=utf-8\r\n"
       << "Access-Control-Allow-Origin: http://localhost:4173\r\n"
-      << "Access-Control-Allow-Headers: Content-Type, Authorization\r\n"
+      << "Access-Control-Allow-Headers: Content-Type, Authorization, X-EXOTIC-Session\r\n"
       << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-      << "Cache-Control: no-store\r\n"
-      << "X-Content-Type-Options: nosniff\r\n"
-      << "X-Frame-Options: DENY\r\n"
-      << "Content-Security-Policy: default-src 'none'\r\n"
-      << "Content-Length: " << body.size() << "\r\n"
-      << "Connection: close\r\n\r\n" << body;
+      << "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\n"
+      << "Content-Security-Policy: default-src 'none'\r\nContent-Length: " << body.size()
+      << "\r\nConnection: close\r\n\r\n" << body;
   return out.str();
 }
 }  // namespace
@@ -131,50 +153,50 @@ int main(int argc, char** argv) {
   const std::string operator_token = token_env ? token_env : "";
   const char* journal_env = std::getenv("EXOTIC_FREE_AGENT_JOURNAL");
   const std::string journal_path = journal_env ? journal_env : ".exotic/free-agent-ledger.tsv";
+  const char* db_env = std::getenv("EXOTIC_AGENT_DB");
+  const std::string db_path = db_env ? db_env : ".exotic/free-agent.db";
+  const std::filesystem::path db_fs(db_path);
+  if (db_fs.has_parent_path()) std::filesystem::create_directories(db_fs.parent_path());
 
 #ifdef _WIN32
   WSADATA data{};
-  if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
-    std::cerr << "WSAStartup failed\n";
-    return 1;
-  }
+  if (WSAStartup(MAKEWORD(2, 2), &data) != 0) { std::cerr << "WSAStartup failed\n"; return 1; }
 #endif
 
   socket_t server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (server == invalid_socket) {
-    std::cerr << "socket creation failed\n";
-    return 1;
-  }
-
+  if (server == invalid_socket) { std::cerr << "socket creation failed\n"; return 1; }
   int reuse = 1;
 #ifdef _WIN32
   setsockopt(server, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
 #else
   setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 #endif
-
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   addr.sin_port = htons(static_cast<unsigned short>(port));
-
   if (bind(server, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || listen(server, 16) != 0) {
-    std::cerr << "failed to bind/listen on 127.0.0.1:" << port << '\n';
-    close_socket(server);
-    return 1;
+    std::cerr << "failed to bind/listen on 127.0.0.1:" << port << '\n'; close_socket(server); return 1;
   }
 
-  exotic::cognition::FreeAgentService service{journal_path};
+  exotic::cognition::FreeAgentService service{journal_path, db_path};
+  exotic::cognition::OperatorSessionManager sessions{*service.store()};
+  std::jthread idle_worker([&service](std::stop_token stop) {
+    while (!stop.stop_requested()) {
+      for (int i = 0; i < 30 && !stop.stop_requested(); ++i) std::this_thread::sleep_for(std::chrono::seconds(1));
+      if (!stop.stop_requested()) {
+        try { service.idle_tick(false); } catch (...) {}
+      }
+    }
+  });
+
   std::cout << "EXOTIC Free-Agent API listening on http://127.0.0.1:" << port << '\n'
-            << "Cognition journal: " << journal_path << '\n';
-  if (operator_token.empty()) {
-    std::cout << "WARNING: EXOTIC_OPERATOR_TOKEN is unset; local mutation endpoints are unauthenticated.\n";
-  }
+            << "SQLite state: " << db_path << '\n' << "Cognition journal: " << journal_path << '\n';
+  if (operator_token.empty()) std::cout << "WARNING: EXOTIC_OPERATOR_TOKEN is unset; local mutation endpoints are unauthenticated.\n";
 
   for (;;) {
     socket_t client = accept(server, nullptr, nullptr);
     if (client == invalid_socket) continue;
-
     std::string request;
     char buffer[4096];
     for (;;) {
@@ -209,41 +231,59 @@ int main(int argc, char** argv) {
     std::string payload;
     int status = 200;
     try {
-      if (method == "OPTIONS") {
-        status = 204;
-      } else if (method == "GET" && path == "/health") {
-        payload = service.health_json();
-      } else if (method == "GET" && path == "/version") {
-        payload = service.version_json();
-      } else if (method == "GET" && path == "/api/free-agent/state") {
-        payload = service.state_json();
-      } else if (method == "POST" && !mutation_authorized(request, operator_token)) {
-        status = 401;
-        payload = "{\"error\":\"operator authorization required\"}";
-      } else if (method == "POST" && path == "/api/free-agent/thoughts") {
-        const auto subject = extract_json_string(body, "subject");
-        if (subject.empty() || subject.size() > 4096) {
-          status = 400;
-          payload = "{\"error\":\"subject must contain 1-4096 characters\"}";
+      if (method == "OPTIONS") { status = 204; }
+      else if (method == "GET" && path == "/health") payload = service.health_json();
+      else if (method == "GET" && path == "/version") payload = service.version_json();
+      else if (method == "GET" && path == "/api/free-agent/state") payload = service.state_json();
+      else if (method == "POST" && path == "/api/operator/session") {
+        if (!operator_token.empty() && header_value(request, "Authorization") != "Bearer " + operator_token) {
+          status = 401; payload = "{\"error\":\"bootstrap authorization required\"}";
         } else {
-          payload = thought_json(service.submit_thought(subject));
-          status = 201;
+          const auto operator_id = extract_json_string(body, "operatorId");
+          if (operator_id.empty()) { status = 400; payload = "{\"error\":\"operatorId required\"}"; }
+          else {
+            const auto token = random_token();
+            const auto session = sessions.create(operator_id, token, now_unix(), 3600);
+            payload = "{\"sessionId\":\"" + json_escape(session.id) + "\",\"token\":\"" + json_escape(token) + "\",\"expiresUnix\":" + std::to_string(session.expires_unix) + "}";
+            status = 201;
+          }
         }
-      } else if (method == "POST" && path == "/api/free-agent/mode") {
-        const auto requested_mode = extract_json_string(body, "mode");
-        if (!service.set_mode(requested_mode)) {
-          status = 400;
-          payload = "{\"error\":\"invalid mode\"}";
-        } else {
-          payload = service.state_json();
-        }
-      } else {
-        status = 404;
-        payload = "{\"error\":\"not found\"}";
       }
+      else if (method == "POST" && !mutation_authorized(request, operator_token, &sessions)) {
+        status = 401; payload = "{\"error\":\"operator authorization required\"}";
+      }
+      else if (method == "POST" && path == "/api/free-agent/thoughts") {
+        const auto subject = extract_json_string(body, "subject");
+        if (subject.empty() || subject.size() > 4096) { status = 400; payload = "{\"error\":\"subject must contain 1-4096 characters\"}"; }
+        else { payload = thought_json(service.submit_thought(subject)); status = 201; }
+      }
+      else if (method == "POST" && path == "/api/free-agent/mode") {
+        const auto requested_mode = extract_json_string(body, "mode");
+        if (!service.set_mode(requested_mode)) { status = 400; payload = "{\"error\":\"invalid mode\"}"; }
+        else payload = service.state_json();
+      }
+      else if (method == "POST" && path == "/api/free-agent/identity") {
+        exotic::cognition::AgentIdentity identity;
+        identity.id = "free-agent-01";
+        identity.name = extract_json_string(body, "name");
+        identity.self_description = extract_json_string(body, "selfDescription");
+        identity.avatar_kind = extract_json_string(body, "avatarKind");
+        identity.avatar_value = extract_json_string(body, "avatarValue");
+        if (identity.name.empty()) { status = 400; payload = "{\"error\":\"name required\"}"; }
+        else { service.set_identity(identity); payload = service.state_json(); }
+      }
+      else if (method == "POST" && path == "/api/free-agent/reward") {
+        const double value = extract_json_number(body, "value", 0.0);
+        if (value < -1.0 || value > 1.0) { status = 400; payload = "{\"error\":\"reward value must be between -1 and 1\"}"; }
+        else { service.reward(value, extract_json_string(body, "source"), extract_json_string(body, "reason")); payload = service.state_json(); }
+      }
+      else if (method == "POST" && path == "/api/free-agent/idle-tick") {
+        const auto thought = service.idle_tick(false);
+        payload = thought ? thought_json(*thought) : "{\"status\":\"idle\"}";
+      }
+      else { status = 404; payload = "{\"error\":\"not found\"}"; }
     } catch (const std::exception&) {
-      status = 500;
-      payload = "{\"error\":\"internal server error\"}";
+      status = 500; payload = "{\"error\":\"internal server error\"}";
     }
 
     const auto wire = response(status, payload);
