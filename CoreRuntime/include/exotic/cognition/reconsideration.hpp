@@ -4,13 +4,14 @@
 #include <string>
 #include <vector>
 namespace exotic::cognition {
-enum class ReconsiderationAction { StayCourse, Suspend, Switch, Abandon, DoNothing };
+enum class ReconsiderationAction { StayCourse, Resume, Suspend, Switch, Abandon, DoNothing };
 struct ReconsiderationSignal {
   double evidence_change{0.0};
   double expected_loss{0.0};
   double conflict{0.0};
   double opportunity_gain{0.0};
   double commitment_inertia{0.0};
+  double staleness{0.0}; // 0=fresh, 1=strongly overdue for review; advisory only
 };
 struct ReconsiderationOption {
   ReconsiderationAction action{ReconsiderationAction::DoNothing};
