@@ -17,7 +17,7 @@ struct DriveRecord { std::string key; double level{0.5}; double target{0.5}; dou
 struct RewardEvent { std::string id; std::string source; double value{0.0}; std::string reason; std::string created_at; };
 struct OperatorSession { std::string id; std::string operator_id; std::string token_hash; std::int64_t expires_unix{0}; bool revoked{false}; };
 struct Episode { std::string id; std::string summary; double salience{0.5}; double reward{0.0}; std::string created_at; };
-struct SemanticMemory { std::string id; std::string concept; std::string statement; double confidence{0.5}; std::string source_episode; };
+struct SemanticMemory { std::string id; std::string topic; std::string statement; double confidence{0.5}; std::string source_episode; };
 struct PersonalityTrait { std::string key; double value{0.5}; double plasticity{0.05}; };
 struct Reflection { std::string id; std::string observation; std::string lesson; double confidence{0.5}; std::string created_at; };
 
