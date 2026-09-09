@@ -1,12 +1,13 @@
 #include "exotic/cognition/intention.hpp"
 #include "exotic/cognition/stable_id.hpp"
+#include "exotic/cognition/storage_schema.hpp"
 #include <sqlite3.h>
 #include <algorithm>
 #include <chrono>
 #include <stdexcept>
 namespace exotic::cognition { namespace {
 void ck(int rc,sqlite3*db,const char*w){if(rc!=SQLITE_OK&&rc!=SQLITE_DONE&&rc!=SQLITE_ROW)throw std::runtime_error(std::string(w)+": "+sqlite3_errmsg(db));}
-class DB{public:explicit DB(const std::string&p){ck(sqlite3_open(p.c_str(),&d_),d_,"open intentions db");}~DB(){if(d_)sqlite3_close(d_);}sqlite3*get()const{return d_;}private:sqlite3*d_{};};
+class DB{public:explicit DB(const std::string&p){ck(sqlite3_open(p.c_str(),&d_),d_,"open intentions db");try{apply_storage_migrations(d_);}catch(...){sqlite3_close(d_);d_=nullptr;throw;}}~DB(){if(d_)sqlite3_close(d_);}sqlite3*get()const{return d_;}private:sqlite3*d_{};};
 class ST{public:ST(sqlite3*d,const char*q){ck(sqlite3_prepare_v2(d,q,-1,&s_,nullptr),d,"prepare");d_=d;}~ST(){sqlite3_finalize(s_);}sqlite3_stmt*get()const{return s_;}sqlite3*d_{};sqlite3_stmt*s_{};};
 void tx(sqlite3_stmt*s,int i,const std::string&v){sqlite3_bind_text(s,i,v.c_str(),-1,SQLITE_TRANSIENT);}std::string col(sqlite3_stmt*s,int i){auto*p=sqlite3_column_text(s,i);return p?reinterpret_cast<const char*>(p):"";}
 std::string out(VolitionOutcome o){switch(o){case VolitionOutcome::Choose:return"choose";case VolitionOutcome::Defer:return"defer";case VolitionOutcome::Reject:return"reject";default:return"do_nothing";}}
