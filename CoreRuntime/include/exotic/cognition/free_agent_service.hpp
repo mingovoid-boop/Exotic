@@ -21,6 +21,7 @@ struct ServiceThought {
 class FreeAgentService {
  public:
   FreeAgentService();
+  explicit FreeAgentService(std::string journal_path);
 
   [[nodiscard]] std::string state_json() const;
   [[nodiscard]] std::string health_json() const;
@@ -34,11 +35,18 @@ class FreeAgentService {
   static std::string now_iso8601();
   static std::string json_escape(const std::string& input);
   static std::string action_name(CognitiveAction action);
+  static std::string field_encode(const std::string& input);
+  static std::string field_decode(const std::string& input);
+
+  void initialize_goals();
+  void load_journal();
+  void append_journal(const ServiceThought& thought) const;
 
   mutable std::mutex mutex_;
   FreeAgentExecutive executive_;
   std::vector<ServiceThought> thoughts_;
   std::string mode_{"idle"};
+  std::string journal_path_;
   std::uint64_t next_thought_id_{1};
 };
 
