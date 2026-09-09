@@ -1,6 +1,8 @@
 #include "exotic/cognition/free_agent_service.hpp"
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -8,6 +10,16 @@
 namespace exotic::cognition {
 
 FreeAgentService::FreeAgentService() {
+  initialize_goals();
+}
+
+FreeAgentService::FreeAgentService(std::string journal_path)
+    : journal_path_(std::move(journal_path)) {
+  initialize_goals();
+  load_journal();
+}
+
+void FreeAgentService::initialize_goals() {
   executive_.add_goal({"goal-1", "Preserve coherent autonomous cognition", 1.0, true, true});
   executive_.add_goal({"goal-2", "Investigate high-value unresolved questions", 0.85, true, true});
 }
@@ -41,6 +53,47 @@ std::string FreeAgentService::json_escape(const std::string& input) {
   return out.str();
 }
 
+std::string FreeAgentService::field_encode(const std::string& input) {
+  static constexpr char hex[] = "0123456789ABCDEF";
+  std::string out;
+  out.reserve(input.size());
+  for (const unsigned char ch : input) {
+    if (ch == '%' || ch == '\t' || ch == '\n' || ch == '\r') {
+      out.push_back('%');
+      out.push_back(hex[(ch >> 4) & 0x0F]);
+      out.push_back(hex[ch & 0x0F]);
+    } else {
+      out.push_back(static_cast<char>(ch));
+    }
+  }
+  return out;
+}
+
+std::string FreeAgentService::field_decode(const std::string& input) {
+  auto value = [](char ch) -> int {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    return -1;
+  };
+
+  std::string out;
+  out.reserve(input.size());
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    if (input[i] == '%' && i + 2 < input.size()) {
+      const int hi = value(input[i + 1]);
+      const int lo = value(input[i + 2]);
+      if (hi >= 0 && lo >= 0) {
+        out.push_back(static_cast<char>((hi << 4) | lo));
+        i += 2;
+        continue;
+      }
+    }
+    out.push_back(input[i]);
+  }
+  return out;
+}
+
 std::string FreeAgentService::action_name(CognitiveAction action) {
   switch (action) {
     case CognitiveAction::Think: return "thinking";
@@ -49,6 +102,71 @@ std::string FreeAgentService::action_name(CognitiveAction action) {
     case CognitiveAction::Stop: return "stopped";
     default: return "idle";
   }
+}
+
+void FreeAgentService::load_journal() {
+  if (journal_path_.empty()) return;
+  std::ifstream in(journal_path_);
+  if (!in) return;
+
+  std::string line;
+  while (std::getline(in, line)) {
+    std::istringstream row(line);
+    std::string id, created, status, score_text, subject, reason;
+    if (!std::getline(row, id, '\t') ||
+        !std::getline(row, created, '\t') ||
+        !std::getline(row, status, '\t') ||
+        !std::getline(row, score_text, '\t') ||
+        !std::getline(row, subject, '\t') ||
+        !std::getline(row, reason)) {
+      continue;
+    }
+
+    ServiceThought thought;
+    thought.id = field_decode(id);
+    thought.created_at = field_decode(created);
+    thought.status = field_decode(status);
+    thought.subject = field_decode(subject);
+    thought.reason = field_decode(reason);
+    try {
+      thought.score = std::stod(score_text);
+    } catch (...) {
+      thought.score = 0.0;
+    }
+
+    thoughts_.insert(thoughts_.begin(), thought);
+
+    constexpr const char* prefix = "thought-";
+    if (thought.id.rfind(prefix, 0) == 0) {
+      try {
+        const auto number = static_cast<std::uint64_t>(std::stoull(thought.id.substr(8)));
+        if (number >= next_thought_id_) next_thought_id_ = number + 1;
+      } catch (...) {
+      }
+    }
+  }
+}
+
+void FreeAgentService::append_journal(const ServiceThought& thought) const {
+  if (journal_path_.empty()) return;
+
+  const std::filesystem::path path(journal_path_);
+  if (path.has_parent_path()) {
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) throw std::runtime_error("unable to create journal directory");
+  }
+
+  std::ofstream out(journal_path_, std::ios::app);
+  if (!out) throw std::runtime_error("unable to open cognition journal");
+  out << field_encode(thought.id) << '\t'
+      << field_encode(thought.created_at) << '\t'
+      << field_encode(thought.status) << '\t'
+      << thought.score << '\t'
+      << field_encode(thought.subject) << '\t'
+      << field_encode(thought.reason) << '\n';
+  out.flush();
+  if (!out) throw std::runtime_error("unable to persist cognition journal");
 }
 
 ServiceThought FreeAgentService::submit_thought(std::string subject) {
@@ -78,6 +196,7 @@ ServiceThought FreeAgentService::submit_thought(std::string subject) {
   thought.reason = record.rationale;
   thought.status = record.action == CognitiveAction::Think ? "selected" : "queued";
   thought.created_at = now_iso8601();
+  append_journal(thought);
   thoughts_.insert(thoughts_.begin(), thought);
   return thought;
 }
@@ -120,7 +239,11 @@ std::string FreeAgentService::state_json() const {
   }
 
   std::string active_thought;
-  if (!ledger.empty()) active_thought = ledger.back().subject;
+  if (!ledger.empty()) {
+    active_thought = ledger.back().subject;
+  } else if (!thoughts_.empty()) {
+    active_thought = thoughts_.front().subject;
+  }
 
   std::ostringstream out;
   out << "{\"agent\":{";
