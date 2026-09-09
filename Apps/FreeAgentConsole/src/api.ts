@@ -34,6 +34,7 @@ export interface FreeAgentState {
 }
 
 const baseUrl = (import.meta.env.VITE_EXOTIC_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+const operatorToken = (import.meta.env.VITE_EXOTIC_OPERATOR_TOKEN as string | undefined)?.trim() ?? '';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -41,6 +42,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      ...(operatorToken ? { Authorization: `Bearer ${operatorToken}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
@@ -50,6 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`EXOTIC API ${response.status}: ${message || response.statusText}`);
   }
 
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -61,7 +64,7 @@ export const exoticApi = {
       body: JSON.stringify({ subject }),
     }),
   setMode: (mode: AgentMode) =>
-    request<AgentSnapshot>('/api/free-agent/mode', {
+    request<FreeAgentState>('/api/free-agent/mode', {
       method: 'POST',
       body: JSON.stringify({ mode }),
     }),
