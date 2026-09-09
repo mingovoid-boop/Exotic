@@ -1,0 +1,4 @@
+#include "exotic/cognition/cognitive_budget.hpp"
+#include <cassert>
+using namespace exotic::cognition;
+int main(){CognitiveBudget b(1.0);auto a=b.consider("topic",1000,.2,.8);assert(a.disposition==AttentionDisposition::Consider);assert(a.remaining_budget<1.0);auto b2=b.consider("topic",1100,.2,.8);assert(b2.novelty_multiplier<a.novelty_multiplier);auto b3=b.consider("topic",1200,.2,.8);auto b4=b.consider("topic",1300,.2,.8);assert(b4.disposition==AttentionDisposition::Cooldown);auto b5=b.consider("topic",1400,.1,.8);assert(b5.disposition==AttentionDisposition::Cooldown);b.stop_topic("other");auto s=b.consider("other",1500,.1,.9);assert(s.disposition==AttentionDisposition::StopTopic);b.resume_topic("other");b.reset(.1);auto e=b.consider("other",1600,.2,.9);assert(e.disposition==AttentionDisposition::BudgetExhausted);return 0;}
