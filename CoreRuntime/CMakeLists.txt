@@ -27,6 +27,7 @@ add_library(exotic_core
   src/agent_store.cpp
   src/idle_cognition.cpp
   src/operator_sessions.cpp
+  src/self_model.cpp
 )
 target_include_directories(exotic_core PUBLIC include)
 target_link_libraries(exotic_core PUBLIC exotic_sqlite)
@@ -57,4 +58,8 @@ if(BUILD_TESTING)
   add_executable(exotic_agent_store_tests tests/agent_store_tests.cpp)
   target_link_libraries(exotic_agent_store_tests PRIVATE exotic_core)
   add_test(NAME exotic_agent_store_tests COMMAND exotic_agent_store_tests)
+
+  add_executable(exotic_self_model_tests tests/self_model_tests.cpp)
+  target_link_libraries(exotic_self_model_tests PRIVATE exotic_core)
+  add_test(NAME exotic_self_model_tests COMMAND exotic_self_model_tests)
 endif()
