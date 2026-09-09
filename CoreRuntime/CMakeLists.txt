@@ -6,11 +6,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(exotic_core
   src/runtime.cpp
   src/free_agent.cpp
+  src/free_agent_service.cpp
 )
 target_include_directories(exotic_core PUBLIC include)
 
 add_executable(exotic_core_demo app/main.cpp)
 target_link_libraries(exotic_core_demo PRIVATE exotic_core)
+
+add_executable(exotic_free_agent_server app/free_agent_server.cpp)
+target_link_libraries(exotic_free_agent_server PRIVATE exotic_core)
+if(WIN32)
+  target_link_libraries(exotic_free_agent_server PRIVATE ws2_32)
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
@@ -21,4 +28,8 @@ if(BUILD_TESTING)
   add_executable(exotic_free_agent_tests tests/free_agent_tests.cpp)
   target_link_libraries(exotic_free_agent_tests PRIVATE exotic_core)
   add_test(NAME exotic_free_agent_tests COMMAND exotic_free_agent_tests)
+
+  add_executable(exotic_free_agent_service_tests tests/free_agent_service_tests.cpp)
+  target_link_libraries(exotic_free_agent_service_tests PRIVATE exotic_core)
+  add_test(NAME exotic_free_agent_service_tests COMMAND exotic_free_agent_service_tests)
 endif()
