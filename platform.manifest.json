@@ -1,17 +1,33 @@
 {
   "name": "EXOTIC",
-  "version": "0.1.0-dev",
+  "version": "0.2.0-dev",
   "status": "prototype",
   "architecture": {
-    "planes": ["control", "intelligence", "execution", "verification"],
-    "event_model": "append-only",
+    "planes": ["control", "intelligence", "execution", "evidence", "experience"],
+    "verification_gate": true,
+    "event_model": "append-only-hash-chain",
+    "event_hash": "sha256",
     "default_mode": "simulation"
   },
   "core_capabilities": [
-    {"id":"core.observe","authority":"read","risk":"low"},
-    {"id":"core.plan","authority":"none","risk":"low"},
-    {"id":"core.execute.echo","authority":"sandbox","risk":"low"}
+    {"id":"core.observe","authority":"read","risk":"low","maturity":"Implemented"},
+    {"id":"core.plan","authority":"none","risk":"low","maturity":"Implemented"},
+    {"id":"core.execute.echo","authority":"sandbox","risk":"low","maturity":"Implemented"}
+  ],
+  "runtime_features": [
+    {"id":"core.identity.grants","maturity":"Implemented"},
+    {"id":"core.policy.gate","maturity":"Implemented"},
+    {"id":"core.verification.before_commit","maturity":"Implemented"},
+    {"id":"core.events.sha256_chain","maturity":"Implemented"},
+    {"id":"core.events.restart_recovery","maturity":"Implemented"},
+    {"id":"core.cognition.free_agent","maturity":"Implemented"}
   ],
   "gates": ["policy", "budget", "execution", "verification"],
-  "required_endpoints": ["/health", "/version", "/capabilities", "/events"]
+  "endpoints": [
+    {"path":"/health","visibility":"internal","maturity":"Proposed"},
+    {"path":"/version","visibility":"internal","maturity":"Proposed"},
+    {"path":"/capabilities","visibility":"internal","maturity":"Proposed"},
+    {"path":"/events","visibility":"internal","maturity":"Proposed"},
+    {"path":"/public/status","visibility":"public","maturity":"Proposed"}
+  ]
 }
