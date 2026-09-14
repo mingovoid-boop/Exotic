@@ -1,8 +1,8 @@
 #include "exotic/core/runtime.hpp"
+#include "exotic/core/crypto.hpp"
 
 #include <algorithm>
 #include <fstream>
-#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -10,15 +10,10 @@
 namespace exotic::core {
 namespace {
 std::string digest(const Event& e) {
-    // Deterministic tamper-evident checksum for v0.2. Replace with a
-    // cryptographic digest before treating the journal as adversary-resistant.
     const auto ticks = std::chrono::duration_cast<std::chrono::milliseconds>(e.timestamp.time_since_epoch()).count();
     const std::string material = std::to_string(e.sequence) + "|" + e.type + "|" + e.actor + "|" +
         e.subject + "|" + e.payload + "|" + std::to_string(ticks) + "|" + e.previous_hash;
-    const auto value = std::hash<std::string>{}(material);
-    std::ostringstream out;
-    out << std::hex << std::setw(sizeof(value) * 2) << std::setfill('0') << value;
-    return out.str();
+    return crypto::sha256_hex(material);
 }
 
 std::string escape(std::string value) {
