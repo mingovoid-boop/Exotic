@@ -93,6 +93,13 @@ bool CapabilityRegistry::register_capability(Capability capability) {
 const Capability* CapabilityRegistry::find(const std::string& id) const {
     const auto it = capabilities_.find(id); return it == capabilities_.end() ? nullptr : &it->second;
 }
+std::vector<Capability> CapabilityRegistry::snapshot() const {
+    std::vector<Capability> result;
+    result.reserve(capabilities_.size());
+    for (const auto& [id, capability] : capabilities_) result.push_back(capability);
+    std::sort(result.begin(), result.end(), [](const Capability& a, const Capability& b) { return a.id < b.id; });
+    return result;
+}
 
 bool IdentityRegistry::register_identity(Identity identity) {
     if (identity.id.empty()) return false;

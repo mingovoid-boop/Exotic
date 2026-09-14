@@ -30,7 +30,7 @@ Runs constrained capabilities. External side effects are disabled by default in 
 Owns append-only causal evidence and verification records. Current v0.2 persists an ordered journal, reloads it after restart, chains records with SHA-256, and rejects chain corruption. Future evidence work includes schema versions, correlation/causation IDs, artifacts, logs, metrics, traces and signed provenance.
 
 ### Experience
-Owns future APIs, Studio and Operations projections. Experience surfaces must not become the only source of authoritative state. The read-only Core HTTP surface is still Proposed and is listed as such in `platform.manifest.json`.
+Owns APIs, Studio and Operations projections. Experience surfaces must not become the only source of authoritative state. Core v0.2 implements a localhost-only read API. Raw evidence routes remain internal, while `/public/status` is a deliberately sanitized projection intended for exact reverse-proxy publication later.
 
 ## Verification gate
 
@@ -61,7 +61,26 @@ Capabilities are identified by stable IDs and carry authority, risk and enabled 
 - `core.plan` — no side-effect authority, low risk.
 - `core.execute.echo` — sandbox authority, low risk.
 
-The runtime also contains implemented identity, policy, verification, event-evidence and bounded Free-Agent features. These are recorded separately from action capabilities in `platform.manifest.json` so the registry does not pretend to expose actions that do not exist.
+The runtime also contains implemented identity, policy, verification, event-evidence, read-only status, and bounded Free-Agent features. These are recorded separately from action capabilities in `platform.manifest.json` so the registry does not pretend to expose actions that do not exist.
+
+## HTTP trust boundary
+
+The status executable binds only to `127.0.0.1`.
+
+Internal routes:
+
+- `GET /health`
+- `GET /version`
+- `GET /capabilities`
+- `GET /events`
+
+Sanitized projection:
+
+- `GET /public/status`
+
+`/public/status` contains only platform/version, runtime readiness, integrity result, event count, capability count, last sequence, and last event time. It intentionally excludes actors, subjects, payloads, event hashes, previous hashes, grants, and full capability metadata.
+
+The phrase **public status** describes the projection's allowed schema, not direct network exposure. Remote binding remains disabled in v0.2. A future reverse proxy may expose only this route after TLS and deployment verification.
 
 ## Release gates
 
@@ -75,18 +94,18 @@ A Core v0.2 candidate must satisfy all applicable gates before promotion:
 6. The journal survives process restart and preserves its chain.
 7. A deliberately corrupted journal is rejected.
 8. Unauthorized capability execution is denied.
-
-HTTP contract verification becomes an additional release gate when the endpoint implementation lands.
+9. The loopback HTTP server responds successfully on all five routes.
+10. `/public/status` passes a raw-evidence field denylist in both unit and network smoke tests.
 
 ## Next required increments
 
 In dependency order unless repository evidence proves an equivalent foundation already exists:
 
-1. read-only `/health`, `/version`, `/capabilities`, `/events` plus sanitized `/public/status`;
-2. durable SQLite event/state transactions, migrations, projections and checkpoints;
-3. approval records with expiry/revocation and durable resource budgets;
-4. idempotent durable Operation records and isolated worker boundary;
-5. correlation/causation IDs plus artifact references;
-6. OpenTelemetry-compatible logs, metrics and traces;
-7. signed evidence and stronger provenance controls;
+1. durable SQLite event/state transactions, migrations, projections and checkpoints;
+2. approval records with expiry/revocation and durable resource budgets;
+3. idempotent durable Operation records and isolated worker boundary;
+4. correlation/causation IDs plus artifact references;
+5. OpenTelemetry-compatible logs, metrics and traces;
+6. signed evidence and stronger provenance controls;
+7. exact reverse-proxy publication of `/public/status` and `mingo.center` integration;
 8. failure-injection, concurrency, repeated-restart and hard-crash tests.
