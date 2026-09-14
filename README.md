@@ -29,7 +29,15 @@ Run the core demonstration after building:
 ./build/CoreRuntime/exotic_core_demo
 ```
 
-On multi-config generators such as Visual Studio, the executable may be under a configuration directory such as `Debug` or `Release`.
+Run the localhost-only status service:
+
+```bash
+./build/CoreRuntime/exotic_core_status --port 8787 --journal exotic-core-v0.2.journal
+```
+
+On multi-config generators such as Visual Studio, executables may be under a configuration directory such as `Debug` or `Release`.
+
+The status process binds **only** to `127.0.0.1`. Raw `/health`, `/version`, `/capabilities`, and `/events` routes are internal operator surfaces. `/public/status` is a sanitized projection intended for a future exact reverse-proxy route; the Core process itself does not enable remote exposure.
 
 ## Architecture rule
 
@@ -56,6 +64,8 @@ Verification is a mandatory gate between execution and accepted state. Intellige
 - append-only event sequencing with persistent journal reload;
 - SHA-256 event hash chaining and tamper rejection;
 - restart recovery of the event journal;
+- deterministic capability snapshots for read-only status projection;
+- loopback-only `/health`, `/version`, `/capabilities`, `/events`, and sanitized `/public/status` HTTP routes;
 - bounded Free-Agent cognition whose external action path requires explicit authorization;
 - CTest coverage plus Windows and Ubuntu CI;
 - a machine-readable `platform.manifest.json` and architecture validator.
@@ -69,10 +79,8 @@ The following are **not yet production-verified**:
 - approval records, expiry/revocation and resource budgets;
 - isolated worker processes and idempotent durable Operations;
 - production authentication, secrets, TLS and remote deployment;
-- `/health`, `/version`, `/capabilities`, `/events` and sanitized `/public/status` HTTP endpoints;
-- signed evidence and complete logs/metrics/traces/artifact correlation.
-
-`platform.manifest.json` marks these endpoint contracts as `Proposed` until executable evidence exists.
+- signed evidence and complete logs/metrics/traces/artifact correlation;
+- a reverse proxy or `mingo.center` deployment of `/public/status`.
 
 ## Journal compatibility
 
