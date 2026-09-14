@@ -1,4 +1,5 @@
 #include "exotic/core/runtime.hpp"
+#include "exotic/core/crypto.hpp"
 
 #include <cassert>
 #include <cstdio>
@@ -7,6 +8,11 @@
 
 using namespace exotic::core;
 
+static void test_sha256_known_answers() {
+    assert(crypto::sha256_hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    assert(crypto::sha256_hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+}
+
 static void test_known_capability_executes_and_verifies() {
     Runtime runtime;
     auto result = runtime.run({"echo test", "core.execute.echo", "hello", true});
@@ -14,6 +20,7 @@ static void test_known_capability_executes_and_verifies() {
     assert(result.output == "hello");
     assert(runtime.events().all().size() == 5);
     assert(runtime.events().verify_chain());
+    for (const auto& event : runtime.events().all()) assert(event.hash.size() == 64);
 }
 
 static void test_unknown_capability_is_denied() {
@@ -49,6 +56,7 @@ static void test_journal_survives_restart() {
         auto result=runtime.run({"persistent", "core.execute.echo", "persist", true});
         assert(result.committed);
         assert(runtime.events().all().size()==5);
+        for (const auto& event : runtime.events().all()) assert(event.hash.size() == 64);
     }
     {
         Runtime recovered(path);
@@ -80,6 +88,7 @@ static void test_tampered_journal_is_rejected() {
 }
 
 int main() {
+    test_sha256_known_answers();
     test_known_capability_executes_and_verifies();
     test_unknown_capability_is_denied();
     test_ungranted_actor_is_denied();

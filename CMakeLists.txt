@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(EXOTIC LANGUAGES CXX)
+project(EXOTIC VERSION 0.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -9,7 +9,7 @@ include(CTest)
 enable_testing()
 
 option(EXOTIC_BUILD_LEGACY_BUILDER "Build the legacy EXOTIC generator CLI" ON)
-option(EXOTIC_BUILD_CORE_RUNTIME "Build EXOTIC Core v0.1 runtime" ON)
+option(EXOTIC_BUILD_CORE_RUNTIME "Build EXOTIC Core v0.2 runtime" ON)
 
 if(EXOTIC_BUILD_LEGACY_BUILDER)
   add_executable(exotic

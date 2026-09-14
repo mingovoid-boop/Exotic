@@ -7,7 +7,7 @@ int main() {
     const exotic::core::ActionRequest request{
         "Demonstrate one governed verified action",
         "core.execute.echo",
-        "EXOTIC Core v0.1",
+        "EXOTIC Core v0.2",
         true
     };
 

@@ -2,7 +2,7 @@ name: EXOTIC Core CI
 
 on:
   push:
-    branches: [main, exotic-core-v0.1]
+    branches: [main, exotic-core-v0.1, exotic-core-v0.2-evidence]
   pull_request:
     branches: [main]
 
@@ -17,6 +17,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate architecture and manifest
+        run: node tooling/validate-architecture.mjs
       - name: Configure
         run: cmake -S . -B build -DEXOTIC_BUILD_LEGACY_BUILDER=ON -DEXOTIC_BUILD_CORE_RUNTIME=ON
       - name: Build
