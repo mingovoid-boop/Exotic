@@ -20,14 +20,20 @@
     {"id":"core.verification.before_commit","maturity":"Implemented"},
     {"id":"core.events.sha256_chain","maturity":"Implemented"},
     {"id":"core.events.restart_recovery","maturity":"Implemented"},
+    {"id":"core.http.loopback_status","maturity":"Implemented"},
+    {"id":"core.http.public_status_projection","maturity":"Implemented"},
     {"id":"core.cognition.free_agent","maturity":"Implemented"}
   ],
   "gates": ["policy", "budget", "execution", "verification"],
+  "network": {
+    "status_bind": "127.0.0.1",
+    "remote_exposure": "disabled"
+  },
   "endpoints": [
-    {"path":"/health","visibility":"internal","maturity":"Proposed"},
-    {"path":"/version","visibility":"internal","maturity":"Proposed"},
-    {"path":"/capabilities","visibility":"internal","maturity":"Proposed"},
-    {"path":"/events","visibility":"internal","maturity":"Proposed"},
-    {"path":"/public/status","visibility":"public","maturity":"Proposed"}
+    {"path":"/health","visibility":"internal","maturity":"Implemented"},
+    {"path":"/version","visibility":"internal","maturity":"Implemented"},
+    {"path":"/capabilities","visibility":"internal","maturity":"Implemented"},
+    {"path":"/events","visibility":"internal","maturity":"Implemented"},
+    {"path":"/public/status","visibility":"public","maturity":"Implemented"}
   ]
 }
