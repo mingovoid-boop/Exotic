@@ -2,7 +2,7 @@ name: EXOTIC Core CI
 
 on:
   push:
-    branches: [main, exotic-core-v0.1, exotic-core-v0.2-evidence]
+    branches: [main, exotic-core-v0.1, exotic-core-v0.2-evidence, exotic-core-v0.2-status-api]
   pull_request:
     branches: [main]
 
@@ -42,3 +42,37 @@ jobs:
           else
             ./build/CoreRuntime/exotic_core_tests
           fi
+      - name: Smoke-test localhost status API
+        shell: bash
+        run: |
+          rm -f ci-status.journal
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            STATUS_EXE="./build/CoreRuntime/Release/exotic_core_status.exe"
+          else
+            STATUS_EXE="./build/CoreRuntime/exotic_core_status"
+          fi
+          "$STATUS_EXE" --port 18787 --max-requests 5 --journal ci-status.journal > status-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          sleep 1
+
+          health="$(curl --fail --silent http://127.0.0.1:18787/health)"
+          version="$(curl --fail --silent http://127.0.0.1:18787/version)"
+          capabilities="$(curl --fail --silent http://127.0.0.1:18787/capabilities)"
+          events="$(curl --fail --silent http://127.0.0.1:18787/events)"
+          public_status="$(curl --fail --silent http://127.0.0.1:18787/public/status)"
+          wait "$pid"
+          trap - EXIT
+
+          echo "$health" | grep -q '"platform":"EXOTIC"'
+          echo "$health" | grep -q '"integrity":true'
+          echo "$version" | grep -q '"version":"0.2.0-dev"'
+          echo "$capabilities" | grep -q 'core.execute.echo'
+          echo "$events" | grep -q '"integrity":true'
+          echo "$public_status" | grep -q '"runtime":"ready"'
+
+          if echo "$public_status" | grep -Eq '"(actor|subject|payload|previous_hash|hash)"'; then
+            echo "ERROR: public status leaked raw evidence fields"
+            exit 1
+          fi
+          rm -f ci-status.journal
