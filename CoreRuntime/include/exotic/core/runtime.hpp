@@ -48,6 +48,7 @@ class CapabilityRegistry {
 public:
     bool register_capability(Capability capability);
     const Capability* find(const std::string& id) const;
+    std::vector<Capability> snapshot() const;
     std::size_t size() const noexcept { return capabilities_.size(); }
 private:
     std::unordered_map<std::string, Capability> capabilities_;
